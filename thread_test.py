@@ -1,7 +1,8 @@
-import threading
 import Queue
-import unittest
+import threading
 import time
+import unittest
+
 
 ''' 
 Custom exception thrown when no target is set
@@ -22,14 +23,14 @@ Custom decorator which allows serialised access to a function
 def serialize(__mutex):
     assert(__mutex != None)
     def __serialize(func):
-        def wraped(*args):
+        def wrapped(*args):
             __mutex.acquire()
             try:
                 result = func(*args)
             finally:
                 __mutex.release()
             return result
-        return wraped 
+        return wrapped 
     return __serialize
 
 
@@ -43,28 +44,28 @@ class thread_pool(object):
     #################################################################################
     class thread_pool_task(object):
         def __init__(self, func, completion_handler, *args, **kwargs):
-            self.func = func
+            self.__func = func
             self.__on_complete = completion_handler
-            self.args = args
-            self.kwargs = kwargs
-            self.result = None
-            self.exception = None
+            self.__args = args
+            self.__kwargs = kwargs
+            self.__result = None
+            self.__exception = None
             self.__internal_complete = False
 
         def run(self):
             try:
-                self.result = self.func(*self.args, **self.kwargs)
+                self.__result = self.__func(*self.__args, **self.__kwargs)
             except Exception, e:
-                self.exception = e
+                self.__exception = e
             self.__internal_complete = True
             self.__on_complete()
 
         def get(self):
             while(self.__internal_complete == False):
                 time.sleep(0.01);
-            if(self.exception != None):
-                raise self.exception;
-            return self.result
+            if(self.__exception != None):
+                raise self.__exception;
+            return self.__result
     
     #################################################################################
     class thread_pool_thread(threading.Thread):
@@ -72,7 +73,7 @@ class thread_pool(object):
             # super(self)
             threading.Thread.__init__(self, group = None, target = None, name = str(idx), 
                 args = (), kwargs = {}, verbose = None)
-            self.pool = pool
+            self.__pool = pool
             self.__complete = False
         
         def sig_complete(self):
@@ -81,7 +82,7 @@ class thread_pool(object):
         def run(self):
             # process whilst our thread-pool is stil alive
             while(self.__complete != True):
-                task = self.pool.pop()
+                task = self.__pool.pop()
                 if(task != None):
                     task.run()    
     
@@ -200,7 +201,7 @@ def test_func(a, b, c, d = None):
 
 # main function
 if __name__ == "__main__":
-    tp = thread_pool(5)
+    tp = thread_pool(40)
     f = tp.process(test_func, 22, 2, 3, d = 4)
     print("The result is %d" % f.get())
     tp.join()
