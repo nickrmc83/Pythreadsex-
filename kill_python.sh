@@ -14,7 +14,7 @@ if [ "$PROC" ]; then
         echo "Success!"
         return $RESULT
     else
-        echo "Failed!"
+        echo "Failed with error: $RESULT"
         return $RESULT
     fi
 fi
