@@ -36,10 +36,15 @@ def serialize(__mutex):
 
 class thread_pool(object):
     #################################################################################
+    class thread_pool_stopped_exception(Exception):
+        def __init__(self):
+            self.message = "Cannot add new threads to a stopped thread-pool"    
+    
+    #################################################################################
     class thread_pool_task(object):
-        def __init__(self, func, complete, *args, **kwargs):
+        def __init__(self, func, completion_handler, *args, **kwargs):
             self.func = func
-            self.complete = complete
+            self.__on_complete = completion_handler
             self.args = args
             self.kwargs = kwargs
             self.result = None
@@ -51,8 +56,8 @@ class thread_pool(object):
                 self.result = self.func(*self.args, **self.kwargs)
             except Exception, e:
                 self.exception = e
-            self.complete()
             self.__internal_complete = True
+            self.__on_complete()
 
         def get(self):
             while(self.__internal_complete == False):
@@ -60,6 +65,7 @@ class thread_pool(object):
             if(self.exception != None):
                 raise self.exception;
             return self.result
+    
     #################################################################################
     class thread_pool_thread(threading.Thread):
         def __init__(self, idx, pool):
@@ -67,24 +73,42 @@ class thread_pool(object):
             threading.Thread.__init__(self, group = None, target = None, name = str(idx), 
                 args = (), kwargs = {}, verbose = None)
             self.pool = pool
+            self.__complete = False
+        
+        def sig_complete(self):
+            self.__complete = True
 
         def run(self):
-            while(self.pool.complete() != True):
+            # process whilst our thread-pool is stil alive
+            while(self.__complete != True):
                 task = self.pool.pop()
                 if(task != None):
                     task.run()    
+    
     ################################################################################# 
-
     def __init__(self, count):
         self.__complete = False
+        self.__mutex = threading.Lock()
         self.__threads = [] 
         self.__tasks = Queue.Queue()
         for i in range(count):
             thread = thread_pool.thread_pool_thread(i, self);
             self.__threads.append(thread)
             thread.start()
+    
+    def add_threads(self, count):
+        with self.__mutex:
+            if(self.complete()):
+                raise thread_pool.thread_pool_stopped_exception()
+            thread = thread_pool.thread_pool_thread(self._threads.count, self)
+            self._threads.append(thread)
+            thread.start()
 
     def process(self, func, *args, **kwargs):
+        with self.__mutex:
+            if(self.complete()):
+                raise thread_pool.thread_pool_stopped_exception()
+        
         task = thread_pool.thread_pool_task(func, self.__tasks.task_done, *args, **kwargs)
         self.__tasks.put(task, block = True)
         return task
@@ -92,18 +116,23 @@ class thread_pool(object):
     def pop(self):
         result = None
         try:
-            result = self.__tasks.get(block = False)
-        except Queue.Empty:
+            result = self.__tasks.get_nowait()
+        except Queue.Empty: # empty queue, sleep for a bit
             time.sleep(0.01)
         return result
 
     def complete(self):
         return self.__complete
-
+   
     def join(self):
+        with self.__mutex:
+            self.__complete = True
+        
+        # Drain the queue of item to be processed
         self.__tasks.join()
-        self.__complete = True
+        # interupt each thread
         for t in self.__threads:
+            t.sig_complete() # signal completion
             t.join()
 
 '''
