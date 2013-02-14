@@ -1,5 +1,7 @@
 #!/bin/sh
 
+# Find locally running python process and kill it!
+
 # find python (local to tty) and note down pid
 PROC=$(ps | grep python | awk -F ' ' '{print $1}')
 
@@ -18,3 +20,5 @@ if [ "$PROC" ]; then
         return $RESULT
     fi
 fi
+# Nothing to be done here. Move on.
+return 0

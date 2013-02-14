@@ -1,4 +1,4 @@
-import Queue
+import queue
 import threading
 import time
 import unittest
@@ -23,12 +23,9 @@ Custom decorator which allows serialised access to a function
 def serialize(__mutex):
     assert(__mutex != None)
     def __serialize(func):
-        def wrapped(*args):
-            __mutex.acquire()
-            try:
-                result = func(*args)
-            finally:
-                __mutex.release()
+        def wrapped(*args, **kwargs):
+            with __mutex:
+                result = func(*args, **kwargs)
             return result
         return wrapped 
     return __serialize
@@ -55,7 +52,7 @@ class thread_pool(object):
         def run(self):
             try:
                 self.__result = self.__func(*self.__args, **self.__kwargs)
-            except Exception, e:
+            except Exception as e:
                 self.__exception = e
             self.__internal_complete = True
             self.__on_complete()
@@ -87,23 +84,83 @@ class thread_pool(object):
                     task.run()    
     
     ################################################################################# 
-    def __init__(self, count):
+    def __init__(self, count, max_items=0):
         self.__complete = False
         self.__mutex = threading.Lock()
         self.__threads = [] 
-        self.__tasks = Queue.Queue()
-        for i in range(count):
+        self.__tasks = queue.Queue(maxsize=max_items)
+        self.__monitor_thread = threading.Thread(target = self.__monitor__,
+                name = "ThreadPool Monitor")
+        self.__min_count = count
+        assert(self.__min_count != 0)
+        for i in range(self.__min_count):
             thread = thread_pool.thread_pool_thread(i, self);
             self.__threads.append(thread)
             thread.start()
+        self.__monitor_thread.start()
     
+    def __monitor__(self):
+        while(self.complete() != True):
+            with self.__mutex:
+                # Snap shot queue and threads.
+                task_count = self.__tasks.qsize()
+                thread_count = len(self.__threads)
+                # If we have more tasks queued than threads
+                # then generate a new thread to handle demand.
+                if(task_count > thread_count):
+                    try:
+                        self.__add_threads(1)
+                    except thread_pool_stopped_exception:
+                        # Processing complete
+                        pass
+                # If we have no tasks and more than the minimum
+                # threads then slowly contract the thread-pool
+                elif((task_count == 0) and (thread_count > self.__min_count)):
+                    try:
+                        self.__remove_threads(1)
+                    except thread_pool_stopped_exception:
+                        # processing complete
+                        pass
+            # monitor 10 times a second
+            time.sleep(0.1)
+
+    def thread_count(self):
+        with self.__mutex:
+            result = len(self.__threads)
+        return result
+
+    def task_count(self):
+        result = self.__queue.qsize()
+
     def add_threads(self, count):
         with self.__mutex:
-            if(self.complete()):
-                raise thread_pool.thread_pool_stopped_exception()
-            thread = thread_pool.thread_pool_thread(self._threads.count, self)
-            self._threads.append(thread)
-            thread.start()
+            self.__add_threads(count)
+
+    def __add_threads(self, count):
+        if(self.complete()):
+            raise thread_pool.thread_pool_stopped_exception()
+        thread = thread_pool.thread_pool_thread(self._threads.count, self)
+        self._threads.append(thread)
+        thread.start()
+    
+    def remove_threads(self, count):
+        with self.__mutex:
+            return self.__remove_threads(count)
+    
+    def __remove_threads(self, count):
+        if(self.complete()):
+            raise thread_pool_stopped_exception()
+        current = len(self.__threads)
+        result = count
+        if(self._min_count < (current - count)):
+            result = current - self.__min_count
+            
+        for i in range(result):
+            thread_to_dispose = self.__threads.pop()
+            thread_to_dispose.sig_complete()
+            thread_to_dispose.join()
+            self.__threads.pop
+        return result
 
     def process(self, func, *args, **kwargs):
         with self.__mutex:
@@ -118,7 +175,7 @@ class thread_pool(object):
         result = None
         try:
             result = self.__tasks.get_nowait()
-        except Queue.Empty: # empty queue, sleep for a bit
+        except queue.Empty: # empty queue, sleep for a bit
             time.sleep(0.01)
         return result
 
@@ -129,12 +186,19 @@ class thread_pool(object):
         with self.__mutex:
             self.__complete = True
         
-        # Drain the queue of item to be processed
+        # Drain the queue of items to be processed
         self.__tasks.join()
+        self.__monitor_thread.join()
         # interupt each thread
         for t in self.__threads:
             t.sig_complete() # signal completion
-            t.join()
+            t.join() # join
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.join()
 
 '''
 A future allows the evaluation of a target asynchronously.
@@ -161,7 +225,7 @@ class future(threading.Thread):
     def run(self):
         try:
             self.__retval = self.__target(*self.__args, **self.__kwargs)
-        except Exception, e:
+        except Exception as e:
             self.__exception = e
 
     # return the result of the asynchronous calculation
@@ -179,13 +243,13 @@ class future_fixture(unittest.TestCase):
     def testNoTargetNoConstruction(self):
         try:
             future()
-        except no_target_exception, e:
+        except no_target_exception as e:
             self.assertEqual(e.message, "No target for specified future")
 
     def testNoTargetNoConstruction(self):
         try:
             future(name="tester")
-        except no_target_exception, e:
+        except no_target_exception as e:
             self.assertEqual(e.message, "No target for specified future (tester)")
 
     def testConstructor(self):
@@ -201,9 +265,9 @@ def test_func(a, b, c, d = None):
 
 # main function
 if __name__ == "__main__":
-    tp = thread_pool(40)
-    f = tp.process(test_func, 22, 2, 3, d = 4)
-    print("The result is %d" % f.get())
-    tp.join()
+    with thread_pool(1) as tp:
+        f = tp.process(test_func, 22, 2, 3, d = 4)
+        print("The result is %d" % f.get())
+
     unittest.main()
 
