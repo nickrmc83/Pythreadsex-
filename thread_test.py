@@ -73,7 +73,7 @@ class thread_pool(object):
             self.__pool = pool
             self.__complete = False
         
-        def sig_complete(self):
+        def sig_is_complete(self):
             self.__complete = True
 
         def run(self):
@@ -100,7 +100,7 @@ class thread_pool(object):
         self.__monitor_thread.start()
     
     def __monitor__(self):
-        while(self.complete() != True):
+        while(self.is_complete() != True):
             with self.__mutex:
                 # Snap shot queue and threads.
                 task_count = self.__tasks.qsize()
@@ -137,7 +137,7 @@ class thread_pool(object):
             self.__add_threads(count)
 
     def __add_threads(self, count):
-        if(self.complete()):
+        if(self.is_complete()):
             raise thread_pool.thread_pool_stopped_exception()
         thread = thread_pool.thread_pool_thread(self._threads.count, self)
         self._threads.append(thread)
@@ -148,7 +148,7 @@ class thread_pool(object):
             return self.__remove_threads(count)
     
     def __remove_threads(self, count):
-        if(self.complete()):
+        if(self.is_complete()):
             raise thread_pool_stopped_exception()
         current = len(self.__threads)
         result = count
@@ -157,14 +157,14 @@ class thread_pool(object):
             
         for i in range(result):
             thread_to_dispose = self.__threads.pop()
-            thread_to_dispose.sig_complete()
+            thread_to_dispose.sig_is_complete()
             thread_to_dispose.join()
             self.__threads.pop
         return result
 
     def process(self, func, *args, **kwargs):
         with self.__mutex:
-            if(self.complete()):
+            if(self.is_complete()):
                 raise thread_pool.thread_pool_stopped_exception()
         
         task = thread_pool.thread_pool_task(func, self.__tasks.task_done, *args, **kwargs)
@@ -179,7 +179,7 @@ class thread_pool(object):
             time.sleep(0.01)
         return result
 
-    def complete(self):
+    def is_complete(self):
         return self.__complete
    
     def join(self):
@@ -191,7 +191,7 @@ class thread_pool(object):
         self.__monitor_thread.join()
         # interupt each thread
         for t in self.__threads:
-            t.sig_complete() # signal completion
+            t.sig_is_complete() # signal completion
             t.join() # join
 
     def __enter__(self):
