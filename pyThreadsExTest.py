@@ -1,4 +1,7 @@
-from pyThreadsEx import serialize, future, no_target_exception 
+import logging
+from pyThreadsEx import serialize, future, no_target_exception, thread_pool, thread_pool_full_exception, thread_pool_stopped_exception
+from time import sleep
+from threading import Condition, Lock
 import unittest
 
 class serialize_fixture(unittest.TestCase):
@@ -62,9 +65,80 @@ def test_func(a, b, c, d = None):
     print("processing test_func")
     return a + b + c + d
 
-# with thread_pool(1) as tp:
-#    f = tp.process(test_func, 22, 2, 3, d = 4)
-#    print("The result is %d" % f.get())
+class thread_pool_fixture(unittest.TestCase):
+    '''
+    Test fixture for thread-pool class
+    '''
+
+    class blocking_call(object):
+        '''
+        Class which blocks until condition is raised
+        '''
+        def __init__(self, lock):
+            self.lock = lock
+            logging.debug("Created blocking_call instance")
+
+        def process(self):
+            assert(self != None)
+            logging.debug("entering process of blocking_call")
+            try:
+                with self.lock:
+                    logging.debug("blocking_call acquired lock")
+            except Exception as e:
+                logging.debug("ERROR %s", e)
+
+    def testConstruction(self):
+        expected_threads = 10
+        expected_max_tasks = 23
+        with thread_pool(expected_threads, max_tasks=expected_max_tasks) as tp:
+            self.assertEqual(expected_threads, tp.thread_count())
+            self.assertEqual(expected_max_tasks, tp.max_tasks())
+    
+    def testTooManyTasksCreatesANewThread(self):
+        l = Lock()
+        with thread_pool(1) as tp:
+            with l:
+                t1 = thread_pool_fixture.blocking_call(l)
+                t2 = thread_pool_fixture.blocking_call(l)
+                t3 = thread_pool_fixture.blocking_call(l)
+                tp.process(t1.process)
+                # wait until the above process has started
+                while(tp.task_count() != 0):
+                    pass
+                # start a second process which fills our queue
+                tp.process(t2.process)
+                # test a third process (the second non-live one)
+                # causes a new thread to be generated
+                tp.process(t3.process)
+                sleep(1.0)
+            # sleep so the monitor can now reduce the thread count
+            # back to the minimum number
+            sleep(1.0)
+            tp.join()
+            self.assertEqual(tp.stats()["MaxThreads"], 2)
+            self.assertEqual(tp.thread_count(), 1)
+    
+    def testTooManyTasksThrows(self):
+        l = Lock()
+        with thread_pool(1, max_tasks=1) as tp:
+            with l:
+                t1 = thread_pool_fixture.blocking_call(l)
+                t2 = thread_pool_fixture.blocking_call(l)
+                t3 = thread_pool_fixture.blocking_call(l)
+                tp.process(t1.process)
+                # wait until the above process has started
+                while(tp.task_count() != 0):
+                    pass
+                # start a second process which fills our queue
+                tp.process(t2.process)
+                # test a third process (the second non-live one)
+                # causes an exception
+                self.assertRaises(thread_pool_full_exception, 
+                        tp.process, t3.process)
+                self.assertEqual(tp.task_count(), 1)
+                self.assertEqual(tp.thread_count(), 1)
+
 if __name__ == "__main__":
     print("Beginning test run ...")
+    logging.getLogger().setLevel(logging.DEBUG)
     unittest.main()
