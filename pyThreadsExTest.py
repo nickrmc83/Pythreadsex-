@@ -1,5 +1,7 @@
 import logging
-from pyThreadsEx import serialize, future, no_target_exception, thread_pool, thread_pool_full_exception, thread_pool_stopped_exception
+from pyThreadsEx import serialize, future, no_target_exception 
+from pyThreadsEx import thread_pool, thread_pool_full_exception 
+from pyThreadsEx import thread_pool_stopped_exception
 from time import sleep
 from threading import Condition, Lock
 import unittest
