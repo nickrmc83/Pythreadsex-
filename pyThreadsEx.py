@@ -3,7 +3,6 @@ import queue
 import threading
 import time
 
-__all__ = ["serialize", "thread_pool", "future"]
 
 def serialize(__mutex):
     '''
@@ -43,7 +42,7 @@ class thread_pool(object):
         - Fully join-able
     '''
     
-    #################################################################################
+    ############################################################################
     class thread_pool_task(object):
         '''
         A thread-pool task is a single unit of work to be undertaken
@@ -80,7 +79,7 @@ class thread_pool(object):
                 raise self.__exception;
             return self.__result
     
-    #################################################################################
+    ############################################################################
     class thread_pool_thread(threading.Thread):
         '''
         This class represents a single thread-pool thread owned by a thread-pool
@@ -102,7 +101,7 @@ class thread_pool(object):
                 if(task != None):
                     task.run()    
     
-    ################################################################################# 
+    ############################################################################
     def __init__(self, count, max_tasks=0):
         self.__complete = False
         self.__mutex = threading.Lock()

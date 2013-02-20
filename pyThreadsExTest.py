@@ -139,6 +139,5 @@ class thread_pool_fixture(unittest.TestCase):
                 self.assertEqual(tp.thread_count(), 1)
 
 if __name__ == "__main__":
-    print("Beginning test run ...")
     logging.getLogger().setLevel(logging.DEBUG)
     unittest.main()
