@@ -226,9 +226,9 @@ class thread_pool(object):
     def pop(self):
         result = None
         try:
-            result = self.__tasks.get_nowait()
-        except queue.Empty: # empty queue, sleep for a bit
-            time.sleep(0.01)
+            result = self.__tasks.get(timeout=0.01)
+        except queue.Empty: # empty queue, ignore
+            pass
         return result
 
     def is_complete(self):

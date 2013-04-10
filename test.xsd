@@ -1,0 +1,7 @@
+<xs:schema xmlns:xs="http://SomeUrl" someattr="10">
+    <xs:simpletype name="some_type">
+        <xs:string name="stringvalue" value="hello"/>
+        <xs:integer name="intvalue" value="10"/>
+        <xs:double name="doublevalue" value="10.5"/>
+    </xs:simpletype>
+</xs:schema>
