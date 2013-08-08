@@ -1,7 +1,7 @@
-import logging
-import queue
-import threading
-import time
+from logging import debug
+from queue import Queue, Empty, Full
+from threading import Thread, Lock
+from time import sleep
 
 
 def serialize(__mutex):
@@ -61,31 +61,31 @@ class thread_pool(object):
             self.__internal_complete = False
 
         def run(self):
-            logging.debug("Starting execution of task %d" % self.__tid)
+            debug("Starting execution of task %d" % self.__tid)
             try:
                 self.__result = self.__func(*self.__args, **self.__kwargs)
             except Exception as e:
                 self.__exception = e
-                logging.debug("Exception %s thrown when executing task %d." % (e, self.__tid))
+                debug("Exception %s thrown when executing task %d." % (e, self.__tid))
             self.__internal_complete = True
             self.__on_complete()
-            logging.debug("Completed task %d" % self.__tid)
+            debug("Completed task %d" % self.__tid)
 
         def get(self):
             while(self.__internal_complete == False):
-                time.sleep(0.01);
+                sleep(0.01);
             if(self.__exception != None):
                 raise self.__exception;
             return self.__result
     
     ############################################################################
-    class thread_pool_thread(threading.Thread):
+    class thread_pool_thread(Thread):
         '''
         This class represents a single thread-pool thread owned by a thread-pool
         '''
         def __init__(self, idx, pool):
             # super(self)
-            threading.Thread.__init__(self, group = None, target = None, name = str(idx), 
+            Thread.__init__(self, group = None, target = None, name = str(idx), 
                 args = (), kwargs = {})
             self.__pool = pool
             self.__complete = False
@@ -103,11 +103,11 @@ class thread_pool(object):
     ############################################################################
     def __init__(self, count, max_tasks=0):
         self.__complete = False
-        self.__mutex = threading.Lock()
+        self.__mutex = Lock()
         self.__next_tid = 1
         self.__threads = [] 
-        self.__tasks = queue.Queue(maxsize=max_tasks)
-        self.__monitor_thread = threading.Thread(target = self.__monitor__,
+        self.__tasks = Queue(maxsize=max_tasks)
+        self.__monitor_thread = Thread(target = self.__monitor__,
                 name = "ThreadPool Monitor")
         self.__min_thread_count = count
         self.__most_thread_count = self.__min_thread_count
@@ -137,7 +137,7 @@ class thread_pool(object):
                 # If we have more tasks queued than threads
                 # then generate a new thread to handle demand.
                 if(task_count > thread_count):
-                    logging.debug("Adding new thread in monitor: tasks = %d, threads = %d" 
+                    debug("Adding new thread in monitor: tasks = %d, threads = %d" 
                             % (task_count, thread_count)) 
                     try:
                         self.__add_threads(1)
@@ -147,7 +147,7 @@ class thread_pool(object):
                 # If we have no tasks and more than the minimum
                 # threads then slowly contract the thread-pool
                 elif((task_count == 0) and (thread_count > self.__min_thread_count)):
-                    logging.debug(
+                    debug(
                             "Removing existing thread in monitor: tasks = %d, threads = %d" 
                             % (task_count, thread_count))
                     try:
@@ -156,7 +156,7 @@ class thread_pool(object):
                         # processing complete
                         pass
             # monitor once a second
-            time.sleep(1.0)
+            sleep(1.0)
 
     def thread_count(self):
         with self.__mutex:
@@ -208,17 +208,17 @@ class thread_pool(object):
                 raise thread_pool.thread_pool_stopped_exception()
             tid = self.__next_tid
             self.__next_tid = self.__next_tid + 1
-            logging.debug("Adding new thread-pool task. %d already queued." % self.task_count())
+            debug("Adding new thread-pool task. %d already queued." % self.task_count())
         try:
             task = thread_pool.thread_pool_task(tid, func, self.__tasks.task_done, *args, **kwargs)
             if(self.__tasks.maxsize == 0):
                 block = True
             else:
                 block = False;
-            logging.debug("Queueing task with blocking as %d" % block)
+            debug("Queueing task with blocking as %d" % block)
             self.__tasks.put(task, block = block)
-        except queue.Full:
-            logging.debug("Failed to add task %d as task queue full" % tid)
+        except Full:
+            debug("Failed to add task %d as task queue full" % tid)
             raise thread_pool_full_exception()
         return task
 
@@ -226,7 +226,7 @@ class thread_pool(object):
         result = None
         try:
             result = self.__tasks.get(timeout=0.01)
-        except queue.Empty: # empty queue, ignore
+        except Empty: # empty queue, ignore
             pass
         return result
 
@@ -261,7 +261,7 @@ class no_target_exception(Exception):
         if(name != None):
             self.message = self.message + " (" + name + ")"
 
-class future(threading.Thread):
+class future(Thread):
     '''
     A future allows the evaluation of a target asynchronously.
     The result of the asynchronous calculation can be accessed
@@ -273,7 +273,7 @@ class future(threading.Thread):
             args=(), kwargs={}):
         if(target == None):
             raise no_target_exception(name)
-        threading.Thread.__init__(self, group, target, name, 
+        Thread.__init__(self, group, target, name, 
                 args, kwargs)
         
         self.__target = target
