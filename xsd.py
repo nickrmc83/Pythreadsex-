@@ -58,43 +58,57 @@ class unknown_type_exception(xsd_gen_exception):
         self.tag = tag
     
     def __str__(self):
-        return "Unknown type %s" % self.tag
+        return "Unknown type %s." % self.tag
 
 class unknown_namespace_exception(xsd_gen_exception):
     def __init__(self, ns):
         self.ns = ns
 
     def __str__(self):
-        return "Unknown namespace %s" % self.ns
+        return "Unknown namespace %s." % self.ns
+
+class double_register_exception(xsd_gen_exception):
+    def __init__(self, uri):
+        self.uri = uri
+
+    def __str__(self):
+        return "Attempted to double register a handler for namespace %s." % self.uri
 
 xsd_type_handlers = {}
 
-def xsd_type_handler(uri):
-    '''
-    All handlers shoudl register themselves via decoration
-    '''
-    assert(uri != None)
-    assert(isinstance(uri, str))
-
-    def __internal(obj):
-        global xsd_type_handlers
-        # If a handler for this namesace has already been
-        # installed then throw an exception
+def register_type_handler(handler, *uris):
+    assert(handler != None)
+    for uri in uris:
+        assert(isinstance(uri, str))
         if(uri in xsd_type_handlers):
-            raise Exception("Two or more handlers declared for namespace %s" % uri)
-        # Add handler to our list
-        xsd_type_handlers[uri] = obj
-        print(xsd_type_handlers)
-        return obj
-    return __internal
+            raise double_register_exception(uri)
+        xsd_type_handlers[uri] = handler
 
-@xsd_type_handler("http://SomeUrl")
+def get_type_handler(ns):
+    assert(ns != None)
+    t = xsd_type_handlers[ns]
+    result = None
+    if(t != None):
+        result = t()
+    return result
+
+def xsd_type_handler(*uris):
+    '''
+    All static handlers should register themselves 
+    via decoration
+    '''
+    def __internal__(handler):
+        register_type_handler(handler, *uris)
+        return handler 
+    return __internal__
+
+xsd_handler_uri = "http://SomeUrl"
+
+@xsd_type_handler(xsd_handler_uri)
 class xsd_types(object):
-    xsd_handler_uri = "http://SomeUrl"
-    
     def is_xsd(self, obj):
         obj_ns, obj_tag = decode_string_xmlns(obj.tag)
-        if(obj_ns != xsd_types.xsd_handler_uri):
+        if(obj_ns != xsd_handler_uri):
             raise unknown_namespace_exception(obj_ns)
         if(obj_tag != "schema"):
             raise unknown_type_exception(obj_tag)
@@ -111,6 +125,7 @@ class xsd_types(object):
         raise unknown_type_exception(tag)
 
 def decode_string_xmlns(val):
+    assert(len(val) > 0)
     if(val[0] == "{"):
         return val[1:].split("}")
     return ("", val) # empty namespace and value
@@ -122,15 +137,10 @@ class xsd_gen(object):
 
     def __init__(self, data):
         self.xsd = data
-        # Build a vtable map of namepscaes and types to handlers
-        self.type_handlers = {
-                xsd_gen.default_handler_uri : None, # default namespace
-                xsd_types.xsd_handler_uri : xsd_types()# xsd namespace
-                }
 
     def compile_il(self):
         # Check this is an xsd object
-        self.type_handlers[xsd_types.xsd_handler_uri].is_xsd(self.xsd)
+        get_type_handler(xsd_handler_uri).is_xsd(self.xsd)
 
         # dictionary which represents the internal type representations
         result = {}
@@ -141,49 +151,49 @@ class xsd_gen(object):
                 # If we don't know about the namespace raise
                 # an unknown namespace_exception
                 ns, tag = decode_string_xmlns(c.tag)
-                ns_handler = self.type_handlers[ns]
+                ns_handler = get_type_handler(ns)
                 if(ns_handler == None):
                     raise unknown_namespace_exception(ns)
                 v = ns_handler.parse(tag, c)
                 result[c.tag] = v
         return result
 
+# Supported language generators
+language_generators = {
+    "cpp" : None, 
+    "csharp" : None, 
+    "java" : None, 
+    "python" : None
+    }
+
 if __name__ == "__main__":
     # Load, parse and obtain root element of xsd
-    parser = ArgumentParser(description="xsd to code generator", 
+    parser = ArgumentParser(description="xsd to code generator.", 
             version="1.0.0.0", 
             add_help=True)
     parser.add_argument("filename", 
             metavar="filename", 
             type=str, 
-            help="The name of the xsd file to genarate from")
-    parser.add_argument("--language",
+            help="The name of the xsd file to generate from.")
+    parser.add_argument("language",
             metavar="language",
-            choices=["python"],
-            default="python",
+            choices=language_generators.keys(),
             type=str,
-            help="The output language to generate. Python by default.")
+            help="The output code language to generate.")
     
     args = parser.parse_args()
     
     if(not os.path.exists(args.filename)):
-        raise Exception("The source xsd does not exist: %s" % args.filename) 
+        raise Exception("The source xsd does not exist: %s." % args.filename)
     try:
         root = ElementTree(file=args.filename).getroot()
-        print("Compiling il for %s" % args.filename)
+        print("Compiling il for %s ..." % args.filename)
         il = xsd_gen(root).compile_il();
-        print("Generated il %s" % il)
+        print("Generated il %s." % il)
         
         print("Generating code for %s." % args.language)
-        if(args.language == "python"):
-            pass
-        if(args.language == "c++"):
-            pass
-        if(args.language == "c#"):
-            pass
-        if(args.language =="java"):
-            pass
-
-        print("Completed code generation from %s for language %s" % (args.filename, args.language))
-    except unknown_type_exception, e:
-        print("Unknown type in xsd, <%s/>" % e.tag)
+        generator = language_generators[args.language]
+        assert(generator != None)
+        print("Completed code generation from %s for language %s." % (args.filename, args.language))
+    except Exception, e:
+        print(e)

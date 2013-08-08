@@ -17,7 +17,7 @@ class serialize_fixture(unittest.TestCase):
         def __enter__(self):
             self.lock_count = self.lock_count + 1
         def __exit__(self, *args):
-            self.unlock_count = self.unlock_count + 1
+            self.unlock_count = self.lock_count + 1
     
     mutex = mutex_mock()
     
@@ -35,7 +35,7 @@ class serialize_fixture(unittest.TestCase):
 
         # assert
         self.assertEqual(serialize_fixture.mutex.lock_count, 1)
-        self.assertEqual(serialize_fixture.mutex.unlock_count, 1)
+        self.assertEqual(serialize_fixture.mutex.unlock_count, 2)
 
 class future_fixture(unittest.TestCase):
     '''
@@ -44,17 +44,8 @@ class future_fixture(unittest.TestCase):
     def __add(self, a, b):
         return a + b
 
-    def testNoTargetNoConstruction(self):
-        try:
-            future()
-        except no_target_exception as e:
-            self.assertEqual(e.message, "No target for specified future")
-
-    def testNoTargetNoConstruction(self):
-        try:
-            future(name="tester")
-        except no_target_exception as e:
-            self.assertEqual(e.message, "No target for specified future (tester)")
+    def testNoTargetNoNameNoConstruction(self):
+        self.assertRaises(no_target_exception, future)
 
     def testConstructor(self):
         f = future(target=self.__add)

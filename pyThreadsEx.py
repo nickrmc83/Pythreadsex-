@@ -24,7 +24,6 @@ class thread_pool_stopped_exception(Exception):
     use a stopped thread-pool is attempted.
     '''
     "Cannot add new threads to a stopped thread-pool."
-    pass
 
 class thread_pool_full_exception(Exception):
     '''
@@ -87,7 +86,7 @@ class thread_pool(object):
         def __init__(self, idx, pool):
             # super(self)
             threading.Thread.__init__(self, group = None, target = None, name = str(idx), 
-                args = (), kwargs = {}, verbose = None)
+                args = (), kwargs = {})
             self.__pool = pool
             self.__complete = False
         
@@ -156,8 +155,8 @@ class thread_pool(object):
                     except thread_pool_stopped_exception:
                         # processing complete
                         pass
-            # monitor 10 times a second
-            time.sleep(0.1)
+            # monitor once a second
+            time.sleep(1.0)
 
     def thread_count(self):
         with self.__mutex:
@@ -271,11 +270,12 @@ class future(threading.Thread):
     re-thrown from the get() method.
     '''
     def __init__(self, group=None, target=None, name=None,
-            args=(), kwargs={}, verbose=None):
-        threading.Thread.__init__(self, group, target, name, 
-                args, kwargs, verbose)
+            args=(), kwargs={}):
         if(target == None):
             raise no_target_exception(name)
+        threading.Thread.__init__(self, group, target, name, 
+                args, kwargs)
+        
         self.__target = target
         self.__args = args
         self.__kwargs = kwargs
@@ -283,7 +283,6 @@ class future(threading.Thread):
         self.__excepton = None # internal exception
         self.start()
 
-    # override the thread run method
     def run(self):
         try:
             self.__retval = self.__target(*self.__args, **self.__kwargs)
