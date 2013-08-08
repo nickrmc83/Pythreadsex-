@@ -296,3 +296,9 @@ class future(threading.Thread):
             return self.__retval;
         if(self.__exception != None):
             raise self.__exception
+
+    def __enter__(self):
+        return self
+
+    def __exit__(*args, **kwargs):
+        self.get()

@@ -51,8 +51,8 @@ class future_fixture(unittest.TestCase):
         f = future(target=self.__add)
 
     def testExecute(self):
-        f = future(target=self.__add, args=(10,12))
-        self.assertEqual(f.get(), 22)
+        f1 = future(target=self.__add, args=(10,12))
+        self.assertEqual(f1.get(), 22)
 
 def test_func(a, b, c, d = None):
     print("processing test_func")
