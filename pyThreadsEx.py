@@ -69,10 +69,7 @@ class thread_pool(object):
                 self.__exception = e
                 debug("Exception %s thrown when executing task %d." % (e, self.__tid))
             
-            debug("releasing lock")
             self.__on_complete()
-            
-            debug("locked releases")
             self.__completion_condition.release()
             debug("Completed task %d" % self.__tid)
 
