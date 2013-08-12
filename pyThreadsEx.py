@@ -1,6 +1,6 @@
 from logging import debug
 from queue import Queue, Empty, Full
-from threading import Thread, Lock
+from threading import Thread, Lock, Condition
 from time import sleep
 
 
@@ -58,7 +58,8 @@ class thread_pool(object):
             self.__kwargs = kwargs
             self.__result = None
             self.__exception = None
-            self.__internal_complete = False
+            self.__completion_condition = Lock()
+            self.__completion_condition.acquire()
 
         def run(self):
             debug("Starting execution of task %d" % self.__tid)
@@ -67,16 +68,22 @@ class thread_pool(object):
             except Exception as e:
                 self.__exception = e
                 debug("Exception %s thrown when executing task %d." % (e, self.__tid))
-            self.__internal_complete = True
+            
+            debug("releasing lock")
             self.__on_complete()
+            
+            debug("locked releases")
+            self.__completion_condition.release()
             debug("Completed task %d" % self.__tid)
 
         def get(self):
-            while(self.__internal_complete == False):
-                sleep(0.01);
-            if(self.__exception != None):
-                raise self.__exception;
-            return self.__result
+            # Acquire the internal lock.
+            # The ability to acquire the internal lock is
+            # only possible once the task has run.
+            with self.__completion_condition:
+                if(self.__exception != None):
+                    raise self.__exception;
+                return self.__result
     
     ############################################################################
     class thread_pool_thread(Thread):
