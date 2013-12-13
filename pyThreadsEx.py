@@ -58,8 +58,8 @@ class thread_pool(object):
             self.__kwargs = kwargs
             self.__result = None
             self.__exception = None
-            self.__completion_condition = Lock()
-            self.__completion_condition.acquire()
+            self.__completed = False
+            self.__completion_condition = Condition()
 
         def run(self):
             debug("Starting execution of task %d" % self.__tid)
@@ -68,8 +68,10 @@ class thread_pool(object):
             except Exception as e:
                 self.__exception = e
                 debug("Exception %s thrown when executing task %d." % (e, self.__tid))
-            
+            self.__completion_condition.acquire()
+            self.__completed = True
             self.__on_complete()
+            self.__completion_condition.notify_all()
             self.__completion_condition.release()
             debug("Completed task %d" % self.__tid)
 
@@ -77,10 +79,13 @@ class thread_pool(object):
             # Acquire the internal lock.
             # The ability to acquire the internal lock is
             # only possible once the task has run.
-            with self.__completion_condition:
-                if(self.__exception != None):
-                    raise self.__exception;
-                return self.__result
+            self.__completion_condition.acquire()
+            if(self.__completed is False):
+                self.__completion_condition.wait()
+            self.__completion_condition.release()
+            if(self.__exception != None):
+                raise self.__exception;
+            return self.__result
     
     ############################################################################
     class thread_pool_thread(Thread):
@@ -89,7 +94,7 @@ class thread_pool(object):
         '''
         def __init__(self, idx, pool):
             # super(self)
-            Thread.__init__(self, group = None, target = None, name = str(idx), 
+            Thread.__init__(self, group = None, name = str(idx), 
                 args = (), kwargs = {})
             self.__pool = pool
             self.__complete = False
@@ -273,7 +278,7 @@ class future(Thread):
     the evaluation of the target, the exception will be
     re-thrown from the get() method.
     '''
-    def __init__(self, group=None, target=None, name=None,
+    def __init__(self, target=None, group=None, name=None,
             args=(), kwargs={}):
         if(target == None):
             raise no_target_exception(name)
@@ -300,6 +305,7 @@ class future(Thread):
             return self.__retval;
         if(self.__exception != None):
             raise self.__exception
+        return None
 
     def __enter__(self):
         return self
