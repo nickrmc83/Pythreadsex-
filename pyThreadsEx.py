@@ -289,7 +289,7 @@ class future(Thread):
         self.__args = args
         self.__kwargs = kwargs
         self.__retval = None # return value
-        self.__excepton = None # internal exception
+        self.__exception = None # internal exception
         self.start()
 
     def run(self):
@@ -301,11 +301,9 @@ class future(Thread):
     # return the result of the asynchronous calculation
     def get(self, timeout=None):
         self.join(timeout)
-        if(self.__retval != None):
-            return self.__retval;
         if(self.__exception != None):
             raise self.__exception
-        return None
+        return self.__retval;
 
     def __enter__(self):
         return self
